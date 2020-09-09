@@ -76,8 +76,9 @@ $args = array(
 			'server' => 'localhost',
 			'port' => 3306,
 			'type' => 'mysql',
-			'table_blacklist' => array(),
-			'column_blacklist' => array(),
+			'table_blocklist' => array(),
+			'column_blocklist' => array(),
+			'table_allowlist' => array(),
 );
 
 register_db_api( 'dataset_name', $args );
@@ -97,8 +98,9 @@ $args = array(
 			'server' => 'localhost',
 			'port' => 3306,
 			'type' => 'mysql',
-			'table_blacklist' => array('cache', 'passwords'),
-			'column_blacklist' => array('password_hint'),
+			'table_blocklist' => array('cache', 'passwords'),
+			'column_blocklist' => array('password_hint'),
+			'table_allowlist' => array(),
 );
 
 register_db_api( 'facility-inspections', $args );
@@ -107,6 +109,33 @@ register_db_api( 'facility-inspections', $args );
 
 Retrieving the contents of the table `history` within this dataset as JSON would be accomplished with a request for `/facility-inspections/history.json`. Note that it is the name of the dataset (`facility-inspections`) and not the name of the database (`inspections`) that is specified in the URL.
 
+Using the Allowlist
+--------------------
+If you specify tables via table_allowlist, it will prevent exposing *all* other tables. If you do not want to use the allowlist, you can leave it blank, i.e. ``'table_allowlist' => array()`` and it will be ignored.
+
+```php
+
+$args = array( 
+			'name' => 'inspections',
+			'username' => 'website',
+			'password' => 's3cr3tpa55w0rd',
+			'server' => 'localhost',
+			'port' => 3306,
+			'type' => 'mysql',
+			'table_blocklist' => array(),
+			'column_blocklist' => array('password_hint'),
+			'table_allowlist' => array('data_public', 'moredata_public'),
+);
+
+register_db_api( 'api_v1', $args );
+```
+
+Using the allowlist, retreiving the contents of the table `data_public` within this dataset as JSON would be accomplished with a request for `/api_v1/data_public.json`. Note that it is the name of the dataset (`api_v1`) and not the name of the database (`inspections`) that is specified in the URL. 
+
+In the above example, using `/api_v1/users.json` would fail, even if there were a users table, because it is not specified in the allowlist.  
+
+Other Datasets
+--------------
 For a SQLite database, simply provide the path to the database in `name`.
 
 For an Oracle database, you can either specify a service defined in tsnames.ora (e.g. `dept_spending`) or you can define an Oracle Instant Client connection string (e.g., `//localhost:1521/dept_spending`).
