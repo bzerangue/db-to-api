@@ -10,6 +10,7 @@ class DB_API {
 	public $ttl = 3600;
 	public $cache = array();
 	public $connections = array();
+	public $format = 'json'; 
 
 	function __construct() {
 
@@ -40,8 +41,9 @@ class DB_API {
 			'server' => 'localhost',
 			'port' => 3306,
 			'type' => 'mysql',
-			'table_blacklist' => array(),
-			'column_blacklist' => array(),
+			'table_blocklist' => array(),
+			'table_allowlist' => array(),
+			'column_blocklist' => array(),
 			'ttl' => $this->ttl,
 		);
 
@@ -166,8 +168,12 @@ class DB_API {
 
 		$db = $this->get_db( $parts['db'] );
 
-		if ( in_array( $parts['table'], $db->table_blacklist ) ) {
+		if ( in_array( $parts['table'], $db->table_blocklist ) ) {
 			$this->error( 'Invalid table', 404 );
+		}
+		
+		if ( sizeof($db->table_allowlist)>0 && !in_array( $parts['table'], $db->table_allowlist ) ) {
+			$this->error( 'Invalid method: '.$parts['table'], 404 );
 		}
 
 		if ( !in_array( $parts['direction'], array( 'ASC', 'DESC' ) ) ) {
@@ -177,7 +183,7 @@ class DB_API {
 		if ( !in_array( $parts['format'], array( 'html', 'xml', 'json' ) ) ) {
 			$parts['format'] = null;
 		}
-
+		
 		return $parts;
 
 	}
@@ -335,6 +341,8 @@ class DB_API {
 	 * @return array an array of results
 	 */
 	function query( $query, $db = null ) {
+		
+		$this->format = $query['format'];  
 
 		$key = md5( serialize( $query ) . $this->get_db( $db )->name );
 		
@@ -400,18 +408,18 @@ class DB_API {
 	}
 
 	/**
-	 * Remove any blacklisted columns from the data set.
+	 * Remove any blocklisted columns from the data set.
 	 */
 	function sanitize_results( $results, $db = null ) {
 
 		$db = $this->get_db( $db );
 
-		if ( empty( $db->column_blacklist ) ) {
+		if ( empty( $db->column_blocklist ) ) {
 			return $results;
 		}
 
 		foreach ( $results as $ID => $result ) {
-			foreach ( $db->column_blacklist as $column ) {
+			foreach ( $db->column_blocklist as $column ) {
 				unset( $results[ $ID ] -> $column );
 			}
 
@@ -427,11 +435,16 @@ class DB_API {
 	 * @param int $code (optional) the error code with which to respond
 	 */
 	function error( $error, $code = '500' ) {
-	  
-	  if ( is_object( $error ) && method_exists( $error, 'get_message' ) ) {
-	    $error = $error->get_message();
-	  }
-	
+
+		if ( is_object( $error ) && method_exists( $error, 'get_message' ) ) {
+			$error = $error->get_message();
+		}
+		
+		if('json'==$this->format) { 
+			$this->render_json(['error'=>$error], []); 
+			exit; 
+		}
+				
 		http_response_code( $code );
 		die( $error );
 		return false;
@@ -443,6 +456,9 @@ class DB_API {
 	 * @todo Support JSONP, with callback filtering.
 	 */
 	function render_json( $data, $query ) {
+		if(false === $data) { 
+			$data = ['error'=>"No data found"]; 
+		} 		
 
 		header('Content-type: application/json');
 		$output = json_encode( $data );
@@ -480,9 +496,9 @@ class DB_API {
 	 */
 	function render_html( $data ) {
 
-  	require_once( dirname( __FILE__ ) . '/bootstrap/header.html' );
+	  require_once( dirname( __FILE__ ) . '/bootstrap/header.html' );
 
-  	//err out if no results
+	  //err out if no results
 		if ( empty( $data ) ) {
 		  $this->error( 'No results found', 404 );
 		  return;
@@ -495,29 +511,29 @@ class DB_API {
 		echo "<table class='table table-striped'>\n<thead>\n<tr>\n";
 
 		foreach ( array_keys( get_object_vars( reset( $data ) ) ) as $heading ) {
-  		echo "\t<th>$heading</th>\n";
+		  echo "\t<th>$heading</th>\n";
 		}
 		
 		echo "</tr>\n</thead>\n";
 		
 		//loop data and render
 		foreach ( $data as $row ) {
-  		
-  		echo "<tr>\n";
-  		
-  		foreach ( $row as $cell ) {
-    		
-    		echo "\t<td>$cell</td>\n";
-    		
-  		}
-  		
-  		echo "</tr>";
-  		
+		  
+		  echo "<tr>\n";
+		  
+		  foreach ( $row as $cell ) {
+			
+			echo "\t<td>$cell</td>\n";
+			
+		  }
+		  
+		  echo "</tr>";
+		  
 		}
 		
 		echo "</table>";
 		
-  	require_once( dirname( __FILE__ ) . '/bootstrap/footer.html' );		
+	  require_once( dirname( __FILE__ ) . '/bootstrap/footer.html' );		
 		
 	}
 
@@ -576,13 +592,13 @@ class DB_API {
 	 * Clean up XML domdocument formatting and return as string
 	 */
 	function tidy_xml( $xml ) {
-  	
+	  
 	   $dom = new DOMDocument();
 	   $dom->preserveWhiteSpace = false;
 	   $dom->formatOutput = true;
 	   $dom->loadXML( $xml->asXML() );
 	   return $dom->saveXML();
-  	
+	  
 	}
 
 	/**
